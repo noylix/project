@@ -12,7 +12,7 @@ class MainWindow(QMainWindow):
         self.db_manager = DatabaseManager("hotel_booking.db")
         self.db_manager.initialize_database()
 
-        self.setWindowTitle("Hotel Booking System")
+        self.setWindowTitle("Система бронирования отелей")
 
         self.stack = QStackedWidget()
         self.setCentralWidget(self.stack)

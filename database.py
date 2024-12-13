@@ -32,7 +32,7 @@ class DatabaseManager:
                 category TEXT NOT NULL CHECK(category IN ('Люкс', 'Полулюкс', 'Стандарт')),
                 capacity INTEGER NOT NULL,
                 price REAL NOT NULL,
-                is_available BOOLEAN NOT NULL DEFAULT 1,
+                is_available BOOLEAN NOT NULL DEFAULT 0,
                 FOREIGN KEY (hotel_id) REFERENCES hotels (id)
             )
             """)
@@ -43,10 +43,61 @@ class DatabaseManager:
                 room_id INTEGER NOT NULL,
                 check_in_date TEXT NOT NULL,
                 check_out_date TEXT NOT NULL,
-                status TEXT NOT NULL DEFAULT 'pending',
+                capacity INTEGER NOT NULL,
+                booking_time TEXT DEFAULT (DATETIME('now')),
+                status TEXT NOT NULL DEFAULT 'в ожидании',
                 FOREIGN KEY (user_id) REFERENCES users (id),
                 FOREIGN KEY (room_id) REFERENCES rooms (id)
             )
+            """)
+            # Вставка данных в таблицу hotels
+            cursor.execute("""
+                INSERT INTO hotels (name, description, rating, country) VALUES
+                ('Отель Москва', 'Уютный отель в центре города', 5, 'Россия'),
+                ('Liberty Inn', 'Отель с панорамным видом на Нью-Йорк', 4, 'США'),
+                ('Paris Luxury Hotel', 'Отель в историческом центре Парижа', 5, 'Франция'),
+                ('Berlin Grand Hotel', 'Отель в центре Берлина с современными удобствами', 4, 'Германия'),
+                ('Roma Palace', 'Классический отель в центре Рима', 5, 'Италия'),
+                ('Tokyo Bay Hotel', 'Современный отель с видом на залив в Токио', 4, 'Япония'),
+                ('Beijing Great Wall Hotel', 'Отель с видом на Великую Китайскую стену', 5, 'Китай'),
+                ('Toronto Towers', 'Элегантный отель в сердце Торонто', 4, 'Канада'),
+                ('Madrid Sunset Hotel', 'Комфортабельный отель с видом на закат в Мадриде', 4, 'Испания'),
+                ('London Regency Hotel', 'Роскошный отель в центре Лондона', 5, 'Великобритания')
+            """)
+
+            # Вставка данных в таблицу rooms (примерные данные для номеров)
+            cursor.execute("""
+                INSERT INTO rooms (hotel_id, category, capacity, price, is_available) VALUES
+                (1, 'Люкс', 2, 10000.0, 1),
+                (1, 'Полулюкс', 2, 7000.0, 1),
+                (1, 'Стандарт', 1, 5000.0, 0),
+                (2, 'Люкс', 3, 12000.0, 1),
+                (2, 'Полулюкс', 2, 9000.0, 1),
+                (2, 'Стандарт', 1, 6000.0, 1),
+                (3, 'Люкс', 2, 15000.0, 1),
+                (3, 'Полулюкс', 2, 11000.0, 0),
+                (3, 'Стандарт', 1, 8000.0, 1),
+                (4, 'Люкс', 2, 16000.0, 1),
+                (4, 'Полулюкс', 2, 10000.0, 1),
+                (4, 'Стандарт', 1, 6000.0, 0),
+                (5, 'Люкс', 3, 13000.0, 1),
+                (5, 'Полулюкс', 2, 8500.0, 1),
+                (5, 'Стандарт', 1, 5500.0, 1),
+                (6, 'Люкс', 2, 17000.0, 1),
+                (6, 'Полулюкс', 2, 10000.0, 1),
+                (6, 'Стандарт', 1, 6500.0, 0),
+                (7, 'Люкс', 3, 14000.0, 1),
+                (7, 'Полулюкс', 2, 9500.0, 1),
+                (7, 'Стандарт', 1, 7000.0, 1),
+                (8, 'Люкс', 2, 11000.0, 1),
+                (8, 'Полулюкс', 2, 8000.0, 1),
+                (8, 'Стандарт', 1, 5000.0, 1),
+                (9, 'Люкс', 3, 12000.0, 1),
+                (9, 'Полулюкс', 2, 8500.0, 1),
+                (9, 'Стандарт', 1, 6000.0, 1),
+                (10, 'Люкс', 2, 12500.0, 1),
+                (10, 'Полулюкс', 2, 9000.0, 1),
+                (10, 'Стандарт', 1, 6000.0, 1)
             """)
             # Add default admin user
             cursor.execute("SELECT * FROM users WHERE role = 'admin'")
@@ -80,7 +131,7 @@ class DatabaseManager:
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                SELECT b.id, u.name, h.name, r.category, b.check_in_date, b.check_out_date, b.status
+                SELECT b.id, u.name, h.name, r.category, b.check_in_date, b.check_out_date, b.booking_time, b.status
                 FROM bookings b
                 JOIN users u ON b.user_id = u.id
                 JOIN rooms r ON b.room_id = r.id
@@ -169,28 +220,28 @@ class DatabaseManager:
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                SELECT id, category, price
+                SELECT id, category, price, capacity
                 FROM rooms
                 WHERE hotel_id = ? AND is_available = 1
             """, (hotel_id,))
-            return cursor.fetchall()
+            return cursor.fetchall()  # возвращаем все поля (id, category, price, capacity)
 
     def book_room(self, user_id, room_id, check_in_date, check_out_date):
         # Check if the room is available for the requested dates
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                SELECT is_available FROM rooms WHERE id = ?
+                SELECT is_available, capacity FROM rooms WHERE id = ?
             """, (room_id,))
             room = cursor.fetchone()
             if room and room[0] == 1:
                 cursor.execute("""
-                    INSERT INTO bookings (user_id, room_id, check_in_date, check_out_date, status)
-                    VALUES (?, ?, ?, ?, 'pending')
-                """, (user_id, room_id, check_in_date, check_out_date))
+                    INSERT INTO bookings (user_id, room_id, check_in_date, check_out_date, capacity, status)
+                    VALUES (?, ?, ?, ?, ?, 'в ожидании')
+                """, (user_id, room_id, check_in_date, check_out_date, room[1]))
                 conn.commit()
                 return True
-            return False
+        return False
 
     def get_user_bookings(self, user_id):
         with sqlite3.connect(self.db_path) as conn:
@@ -214,4 +265,6 @@ class DatabaseManager:
             """, (hotel_id,))
             rooms = cursor.fetchall()
             return rooms
+
+
 

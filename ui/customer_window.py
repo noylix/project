@@ -1,11 +1,8 @@
+from datetime import datetime
+
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QTabWidget, QListWidget, QAbstractItemView,
                              QLabel, QHBoxLayout, QPushButton, QMessageBox, QDialog,
                              QLineEdit, QFormLayout, QComboBox, QSpinBox, QCalendarWidget)
-from PyQt6.QtCore import Qt
-from datetime import datetime
-
-from unicodedata import category
-
 
 class BookingDetailsDialog(QDialog):
     def __init__(self, parent, hotel_name, category):
@@ -22,7 +19,7 @@ class BookingDetailsDialog(QDialog):
         self.passport_number = QLineEdit(self)
         self.phone_number = QLineEdit(self)
         self.payment_method = QComboBox(self)
-        self.payment_method.addItems(["Кредитная карта", "Дебетовая карта", "Прочее"])
+        self.payment_method.addItems(["Картой онлайн", "Прочее"])
         self.number_of_people = QSpinBox(self)
         self.number_of_people.setRange(1, 10)
 
@@ -180,6 +177,18 @@ class CustomerWindow(QWidget):
         layout.addLayout(button_layout)
         self.booking_tab.setLayout(layout)
 
+        self.hotel_list.setStyleSheet("""
+            QListWidget::item {
+                font-size: 16px;
+                padding: 10px;
+            }
+        """)
+        self.room_list.setStyleSheet("""
+            QListWidget::item {
+                font-size: 16px;
+                padding: 10px;
+            }
+        """)
 
     def filter_hotels_by_name(self):
         search_text = self.search_field.text().strip().lower()
@@ -206,11 +215,6 @@ class CustomerWindow(QWidget):
             self.hotels_list = self.db_manager.get_hotels(
                 country=selected_country if selected_country != "Все страны" else None)
 
-            # Проверка на пустой список отелей
-            if not self.hotels_list:
-                print(f"Нет отелей для страны: {selected_country}")
-                QMessageBox.warning(self, "Нет отелей", "Нет отелей для выбранной страны.")
-                return  # Останавливаем выполнение, если нет отелей
 
             # Обновляем self.hotels
             self.hotels = {hotel[1]: hotel[0] for hotel in self.hotels_list}  # {название отеля: id отеля}
@@ -222,7 +226,7 @@ class CustomerWindow(QWidget):
             else:
                 self.filtered_hotels = self.hotels_list
 
-            # Обновляем список отелей
+            # Обновляем список отелей с описанием
             self.update_hotel_list(self.filtered_hotels)
         except Exception as e:
             print(f"Ошибка при загрузке отелей: {e}")
@@ -231,18 +235,18 @@ class CustomerWindow(QWidget):
     def update_hotel_list(self, hotels):
         try:
             self.hotel_list.clear()
-
             for h in hotels:
-                # Выводим данные отеля для диагностики
-                print(f"Полученные данные отеля: {h}")
-
-                # Проверяем, что данные отеля содержат 5 элементов
+                # Проверяем корректность структуры данных отеля
                 if len(h) != 5:
                     print(f"Ошибка данных отеля: {h} — количество элементов не равно 5")
-                    continue  # Пропускаем некорректные данные
+                    continue
 
                 h_id, name, country, desc, rating = h
-                self.hotel_list.addItem(f"{name} ({country}, рейтинг: {rating})")
+
+                max_desc_length = 50
+                short_description = (desc[:max_desc_length] + "...") if len(desc) > max_desc_length else desc
+
+                self.hotel_list.addItem(f"{name} ({country}, рейтинг: {rating}) | {short_description}")
         except Exception as e:
             print(f"Ошибка при обновлении списка отелей: {e}")
             QMessageBox.critical(self, "Ошибка", f"Ошибка при обновлении списка отелей: {e}")
@@ -282,6 +286,13 @@ class CustomerWindow(QWidget):
         layout.addLayout(button_layout)
         self.reservations_tab.setLayout(layout)
 
+        self.booking_list.setStyleSheet("""
+            QListWidget::item {
+                font-size: 16px;
+                padding: 10px;
+            }
+        """)
+
 
     def open_room_selection(self, item):
         hotel_name = item.text().split("(")[0].strip()  # Extract hotel name
@@ -292,11 +303,12 @@ class CustomerWindow(QWidget):
     def load_rooms(self, hotel_id):
         self.room_list.clear()
         rooms = self.db_manager.get_available_rooms(hotel_id)
-        self.rooms = {}  # Reset rooms mapping
+        self.rooms = {}  # Сбросить соответствие комнат
         for r in rooms:
-            r_id, category, price = r  # Изменим с номера на категорию
-            self.rooms[category] = r_id  # Map room category to room ID
-            self.room_list.addItem(f"Номер {category} | Цена: {price} руб.")  # Выводим категорию
+            r_id, category, price, capacity = r  # Добавляем capacity
+            self.rooms[category] = r_id  # Сопоставляем категорию номера с ID номера
+            self.room_list.addItem(
+                f"Номер {category} | Вместимость: {capacity} | Цена: {price} руб.")  # Выводим категорию
 
     def show_booking_details_dialog(self):
         # Get the selected hotel and room
@@ -319,6 +331,7 @@ class CustomerWindow(QWidget):
         try:
             check_in_date = user_details["check_in_date"]
             check_out_date = user_details["check_out_date"]
+
 
             # Проверка правильности дат
             if datetime.strptime(check_in_date, "%Y-%m-%d") >= datetime.strptime(check_out_date, "%Y-%m-%d"):

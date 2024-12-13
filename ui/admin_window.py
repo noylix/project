@@ -1,8 +1,10 @@
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QLabel, QListWidget, QHBoxLayout, QPushButton, QMessageBox,
                              QTabWidget, QInputDialog, QDialog, QFormLayout, QLineEdit, QSpinBox, QDoubleSpinBox,
                              QDialogButtonBox, QComboBox)
-
-
+import datetime
+import pytz
+from openpyxl import Workbook
+from PyQt6.QtWidgets import QFileDialog
 class AddHotelDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -85,7 +87,9 @@ class AddRoomDialog(QDialog):
             "price": self.price_input.value(),
             "category": self.category_input.currentText(),
         }
-
+def get_moscow_time():
+    moscow_tz = pytz.timezone("Europe/Moscow")
+    return datetime.datetime.now(moscow_tz).strftime("%Y-%m-%d %H:%M:%S")
 
 class AdminWindow(QWidget):
     def __init__(self, switch_window, db_manager):
@@ -144,22 +148,56 @@ class AdminWindow(QWidget):
         button_layout = QHBoxLayout()
 
         confirm_button = QPushButton("Подтвердить")
-        confirm_button.clicked.connect(lambda: self.change_booking_status("confirmed"))
+        confirm_button.clicked.connect(lambda: self.change_booking_status("Подтверждено"))
         cancel_button = QPushButton("Отменить")
         cancel_button.clicked.connect(self.delete_booking)
         refresh_button = QPushButton("Обновить")
         refresh_button.clicked.connect(self.load_bookings)
+        export_button = QPushButton("Отчет")
+        export_button.clicked.connect(self.export_bookings_to_excel)  # Добавляем обработчик кнопки
         logout_button = QPushButton("Выйти")
         logout_button.clicked.connect(lambda: self.switch_window("login"))
 
         button_layout.addWidget(confirm_button)
         button_layout.addWidget(cancel_button)
         button_layout.addWidget(refresh_button)
+        button_layout.addWidget(export_button)  # Кнопка для экспорта
         button_layout.addWidget(logout_button)
 
         layout.addLayout(button_layout)
         self.bookings_tab.setLayout(layout)
         self.tabs.addTab(self.bookings_tab, "Бронирования")
+
+    def export_bookings_to_excel(self):
+        try:
+            # Создаём новый Excel файл
+            wb = Workbook()
+            ws = wb.active
+            ws.title = "Подтвержденные бронирования"
+
+            # Добавляем заголовки
+            headers = ["ID", "Пользователь", "Отель", "Номер", "С", "По", "Время бронирования", "Статус"]
+            ws.append(headers)
+
+            # Заполняем данные из базы, оставляя только подтверждённые
+            bookings = self.db_manager.get_all_bookings()
+            confirmed_bookings = [b for b in bookings if b[-1] == "Подтверждено"]
+
+            for b in confirmed_bookings:
+                ws.append(b)
+
+            # Открываем диалог сохранения файла
+            file_path, _ = QFileDialog.getSaveFileName(
+                self, "Сохранить файл", "", "Excel Files (*.xlsx);;All Files (*)"
+            )
+
+            if file_path:
+                # Сохраняем файл
+                wb.save(file_path)
+                QMessageBox.information(self, "Успешно",
+                                        f"Подтвержденные бронирования экспортированы в файл: {file_path}")
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Не удалось экспортировать бронирования: {str(e)}")
 
     def setup_hotels_tab(self):
         self.hotels_tab = QWidget()
@@ -200,10 +238,11 @@ class AdminWindow(QWidget):
         self.booking_list.clear()
         bookings = self.db_manager.get_all_bookings()
         for b in bookings:
-            b_id, user_name, hotel_name, room_num, check_in, check_out, status = b
+            b_id, user_name, hotel_name, room_num, check_in, check_out, booking_time, status = b
+            booking_time_moscow = get_moscow_time()  # Вызываем независимую функцию
             self.booking_list.addItem(
                 f"ID: {b_id} | Пользователь: {user_name} | Отель: {hotel_name} | Номер: {room_num} | "
-                f"С: {check_in} | По: {check_out} | Статус: {status}"
+                f"С: {check_in} | По: {check_out} | Время бронирования: {booking_time_moscow} | Статус: {status}"
             )
 
     def load_hotels(self):
@@ -302,3 +341,5 @@ class AdminWindow(QWidget):
             self.load_bookings()
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", f"Не удалось обновить статус бронирования: {str(e)}")
+
+
